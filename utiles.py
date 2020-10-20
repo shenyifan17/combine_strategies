@@ -68,27 +68,24 @@ def check_sum(weights):
 
 
 def portfolio_optimisation(df_return,
-                           cutoff_date='2000-01-01',
                            upper_bound=1,
                            lower_bound=0,
                            input_bound=None,
-                           drop_strategy=['equity_momentum'],
                            target='sharpe_ratio',
                            optimisation_method='SLSQP'):
     """
     Run portfolio optimisation using user input
     :param df_return: (pandas df): contains daily returns
-    :param cutoff_date: (str or pandas datetime_object)
     :param upper_bound: (float/int) global upper bound for all strategies
     :param lower_bound: (float/int) global lower bound for all strategies
     :param input_bound: (tuples of bounds) different upper/lower bounds for strategies
-    :param drop_strategy: (list) list of strategies to drop (columns to drop from df_return)
     :param target: (str) optimisation target, 'diversification', 'sharpe_ratio', 'return', 'volatility'
     :param optimisation_method: (str) SLSQP for default non-convex optimisation (sharpe, diversification_ratio)
                                       details see scipy.optimize.minimize documentation
     :return: dict containing all optimisation information
     """
-    df_return = df_return[df_return['Date']>=cutoff_date]
+    # remove cutoff date, use df_return
+    df_return = df_return[df_return['Date']>=cutoff_date] 
 
     # Drop unwanted strategis columns
     try:
