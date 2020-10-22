@@ -14,6 +14,8 @@ def cal_return(df):
     df_return = pd.DataFrame()
     df_return['Date'] = pd.to_datetime(df['Date'], format='%d/%m/%Y')
     df_norm['Date'] = df_return['Date']
+    df_return = df_return.set_index('Date')
+    df_norm = df_norm.set_index('Date')
     strategy_list = list(df.columns[1:])
     for strategy in strategy_list:
         cleaned_name = strategy.lower().replace(' ', '_') # change column names into lower case
@@ -84,14 +86,6 @@ def portfolio_optimisation(df_return,
                                       details see scipy.optimize.minimize documentation
     :return: dict containing all optimisation information
     """
-    # remove cutoff date, use df_return
-    df_return = df_return[df_return['Date']>=cutoff_date] 
-
-    # Drop unwanted strategis columns
-    try:
-        df_return = df_return.drop(drop_strategy, axis=1)
-    except ValueError:
-        pass 
 
     num_strategies = len(df_return.columns) - 1
 
@@ -104,7 +98,7 @@ def portfolio_optimisation(df_return,
     if input_bound is not None:
         bounds = input_bound
     else:
-        bounds = tuple([(lower_bound, upper_bound) for i in range(num_strategies)])
+        bounds = [[lower_bound, upper_bound] for i in range(num_strategies)]
     opt_results = minimize(fun=negative_target,
                            x0=init_guess, 
                            args=(df_return, target),
@@ -136,3 +130,116 @@ def portfolio_optimisation(df_return,
             'df_portfolio': df_portfolio, # strategy returns times weights
             'df_return': df_return, # raw strategy returns
             'sharpe_ratio': sharpe_ratio} # annualised sharpe_ratio
+
+
+def get_optimisation_dates(df_return,
+                           start_date=None, 
+                           end_date=None, 
+                           rebalance_freq=1):
+    """"
+    Get months end business day, for rebalance purposes
+
+    Input: 
+    df_return (pd df): as output from cal_return. index must be pd.timestamp
+    start_date (str/pd.timestamp): yyyy-mm-dd
+    end_date (str/pd.timestamp): yyyy-mm-dd
+    rebalance_freq (int): rebalance frequency, default = 1, 
+                          rebalance every month
+    
+    Output:
+    rebalance_dates_list (list of pd.timestamp): end of months rebalance dates
+    """
+    if df_return is not None:
+        start_date, end_date = df_return.index[0], df_return.index[-1]
+    else: 
+        start_date = pd.to_datetime(start_date)
+        end_date = pd.to_datetime(end_date)
+    rebalance_dates_list = list(pd.bdate_range(start=start_date, 
+                                end=end_date, 
+                                freq='BM'))[::rebalance_freq]
+    return rebalance_dates_list
+
+
+def generate_opt_bounds(
+    df_return,          
+    rebalance_dates_list,       
+    default_lower_bound=0,                            
+    default_upper_bound=1,
+    input_bounds={'2009-03-31': {'cot': [0,0.5], 'fx_trend': [0,0.3]}, 
+                 '2009-04-30': {'fx_value': [0, 0.2], 'equity_quality': [0, 0.25]}}
+    ):
+    """"
+    Generate optimisation bounds for each rebalance and each strategy.
+    The optimisation_bounds variable is a dict of dicts, which first layer
+    keys are rebalance dates, sencond layer keys are strategy list, and
+    values are list of two numbers (bounds between 0 and 1). Default using 
+    all [0,1] for all strategies and rebalances 
+
+    input:
+    df_return: as per output from cal_return
+    rebalance_dates_list: (list) as per output from above function
+    default_lower/upper_bound: (float) between 0,1  applied for all strategies for all dates 
+    input_bounds (dict of dict): see example
+
+    output:
+    optimisaiton_bounds (dict of dict): as per described above
+
+    """
+
+    strategy_list = list(df_return.columns)
+    # generate optimisation bounds (initial)
+    optimisation_bounds = {str(rebalance_date)[:10]: 
+                           {strategy: [default_lower_bound, 
+                                       default_upper_bound] for strategy in strategy_list} 
+                           for rebalance_date in rebalance_dates_list}
+    # update opsimisation_bounds with user input:
+    if input_bounds is not None:
+        for rebalance_date in input_bounds.keys():
+            for strategy in input_bounds[rebalance_date]:
+                optimisation_bounds[rebalance_date][strategy] = input_bounds[rebalance_date][strategy]
+    
+    return optimisation_bounds
+
+    
+
+    
+    
+    
+
+
+
+def rolling_portfolio_optimisation(df_return, 
+                                   input_bound,
+                                   window_size='756 days', 
+                                   step_size='21 days', 
+                                   target='sharpe_ratio', 
+                                   optimisation_method='SLSQP'):
+    # Adding strategy in the middle (start with 0s..)
+    # bounds: using pd.DataFrame then do a mapping
+
+    pass
+    # start_date = df_return['Date'].iloc[0]
+    # end_date = start_date + pd.Timedelta(step_size)
+    # last_day = df_return['Date'].iloc[-1]
+    # rolling_result = {}
+
+    # while end_date < last_day:
+    #     
+    #     print(f'optimisaiton period {start_date} - {end_date}')
+
+    #     df_opt = df_return[(df_return['Date'] >= start_date) & 
+    #                        (df_return['Date'] <= end_date)]
+
+    #     result_opt = portfolio_optimisation(df_opt, target=target, 
+    #                                         input_bound={}
+    #                                         optimisation_method=optimisation_method)
+
+    #     if (end_date - start_date) >= pd.Timedelta(window_size):
+    #         start_date += pd.Timedelta(step_size)
+    #     
+    #     end_date += pd.Timedelta(step_size)
+    #     rolling_result[end_date] = result_opt
+
+    # return rolling_result
+
+    #                         
