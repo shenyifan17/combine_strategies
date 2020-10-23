@@ -10,18 +10,14 @@ def cal_return(df):
     :return df_norm: (pandas df) normalised return, starting from 1
             df_return: (pandas df) percentage daily return
     """
-    df_norm = pd.DataFrame()
     df_return = pd.DataFrame()
     df_return['Date'] = pd.to_datetime(df['Date'], format='%d/%m/%Y')
-    df_norm['Date'] = df_return['Date']
-    df_return = df_return.set_index('Date')
-    df_norm = df_norm.set_index('Date')
     strategy_list = list(df.columns[1:])
     for strategy in strategy_list:
         cleaned_name = strategy.lower().replace(' ', '_') # change column names into lower case
-        df_norm[cleaned_name] = df[strategy]/df[strategy].iloc[0]
-        df_return[cleaned_name] = df_norm[cleaned_name].diff()/df_norm[cleaned_name]
-    return df_norm, df_return
+        df_return[cleaned_name] = df[strategy].pct_change(1).fillna(0)
+    df_return = df_return.set_index('Date')
+    return df_return
 
 
 def get_stats(weights, df_return):
@@ -87,10 +83,10 @@ def portfolio_optimisation(df_return,
     :return: dict containing all optimisation information
     """
 
-    num_strategies = len(df_return.columns) - 1
+    num_strategies = len(df_return.columns)
 
     # initialise weights
-    init_guess = np.array(np.random.random(num_strategies))
+    init_guess = np.array(np.random.randn(num_strategies))
     init_guess /= np.sum(init_guess)
     
     cons = ({'type': 'eq', 'fun': check_sum})
@@ -113,29 +109,18 @@ def portfolio_optimisation(df_return,
     sharpe_ratio = stats_results['sharpe_ratio']
     div = stats_results['diversification_ratio']
 
-    df_portfolio = df_return[df_return.columns[1:]] * opt_results.x
-    df_portfolio_sum = pd.DataFrame()
-    df_portfolio_sum['Date'] = df_return['Date']
-    # TO DO: add another rebalanced version of perf using
-    #        monthly rebalance version
-    df_portfolio_sum['perf'] = (1+df_portfolio.sum(axis=1)).cumprod()
-    plt.plot(df_portfolio_sum['Date'], df_portfolio_sum['perf'])
-
     return {'objective': -opt_results.fun,
-            'df_portfolio_sum': df_portfolio_sum, # cumulative performance
             'weights': opt_results.x,
             'return': ret, # annualised return
             'volatility': volatility, # annualised vol
             'diversification_ratio': div, # annualised diversification ratio
-            'df_portfolio': df_portfolio, # strategy returns times weights
-            'df_return': df_return, # raw strategy returns
             'sharpe_ratio': sharpe_ratio} # annualised sharpe_ratio
 
 
 def get_optimisation_dates(df_return,
                            start_date=None, 
                            end_date=None, 
-                           rebalance_freq=1):
+                           optimisation_freq=1):
     """"
     Get months end business day, for rebalance purposes
 
@@ -143,26 +128,26 @@ def get_optimisation_dates(df_return,
     df_return (pd df): as output from cal_return. index must be pd.timestamp
     start_date (str/pd.timestamp): yyyy-mm-dd
     end_date (str/pd.timestamp): yyyy-mm-dd
-    rebalance_freq (int): rebalance frequency, default = 1, 
+    optimisation_freq (int): rebalance frequency, default = 1, 
                           rebalance every month
     
     Output:
-    rebalance_dates_list (list of pd.timestamp): end of months rebalance dates
+    optimisation_dates_list (list of pd.timestamp): end of months rebalance dates
     """
     if df_return is not None:
         start_date, end_date = df_return.index[0], df_return.index[-1]
     else: 
         start_date = pd.to_datetime(start_date)
         end_date = pd.to_datetime(end_date)
-    rebalance_dates_list = list(pd.bdate_range(start=start_date, 
-                                end=end_date, 
-                                freq='BM'))[::rebalance_freq]
-    return rebalance_dates_list
+    optimisation_dates_list = list(pd.bdate_range(start=start_date, 
+                                   end=end_date, 
+                                   freq='BM'))[::optimisation_freq]
+    return optimisation_dates_list
 
 
 def generate_opt_bounds(
     df_return,          
-    rebalance_dates_list,       
+    optimisation_dates_list,       
     default_lower_bound=0,                            
     default_upper_bound=1,
     input_bounds={'2009-03-31': {'cot': [0,0.5], 'fx_trend': [0,0.3]}, 
@@ -183,15 +168,13 @@ def generate_opt_bounds(
 
     output:
     optimisaiton_bounds (dict of dict): as per described above
-
     """
-
     strategy_list = list(df_return.columns)
     # generate optimisation bounds (initial)
     optimisation_bounds = {str(rebalance_date)[:10]: 
                            {strategy: [default_lower_bound, 
                                        default_upper_bound] for strategy in strategy_list} 
-                           for rebalance_date in rebalance_dates_list}
+                           for rebalance_date in optimisation_dates_list}
     # update opsimisation_bounds with user input:
     if input_bounds is not None:
         for rebalance_date in input_bounds.keys():
@@ -200,46 +183,47 @@ def generate_opt_bounds(
     
     return optimisation_bounds
 
-    
-
-    
-    
-    
-
-
 
 def rolling_portfolio_optimisation(df_return, 
-                                   input_bound,
-                                   window_size='756 days', 
-                                   step_size='21 days', 
+                                   default_lower_bound=0,
+                                   default_upper_bound=1,
+                                   window_size=36,  # months
+                                   optimisation_freq=1, # rebalance every x month
                                    target='sharpe_ratio', 
-                                   optimisation_method='SLSQP'):
-    # Adding strategy in the middle (start with 0s..)
-    # bounds: using pd.DataFrame then do a mapping
+                                   optimisation_method='SLSQP',
+                                   input_bounds={'2009-03-31': {'cot': [0,0.5], 'fx_trend': [0,0.3]}, 
+                                   '2009-04-30': {'fx_value': [0, 0.2], 'equity_quality': [0, 0.25]}}
+                                   ):
 
-    pass
-    # start_date = df_return['Date'].iloc[0]
-    # end_date = start_date + pd.Timedelta(step_size)
-    # last_day = df_return['Date'].iloc[-1]
-    # rolling_result = {}
+    ## put in optimisation results 
+    optimisation_dates_list = get_optimisation_dates(df_return=df_return,
+                                                     optimisation_freq=optimisation_freq)
+    
+    optimisation_bounds = generate_opt_bounds(df_return=df_return,
+                                              optimisation_dates_list=optimisation_dates_list,
+                                              default_lower_bound=default_lower_bound,
+                                              default_upper_bound=default_upper_bound,
+                                              input_bounds=input_bounds)
+                
+    slicing_list = [[str(st_date)[:10], 
+                     str(pd.bdate_range(start=st_date, 
+                                    periods=36, 
+                                    freq='BM')[-1])[:10]] 
+                     for st_date in optimisation_dates_list]\
+                     [:-int((window_size/optimisation_freq))]
 
-    # while end_date < last_day:
-    #     
-    #     print(f'optimisaiton period {start_date} - {end_date}')
+    rolling_optimisation_result = {}
+    
+    for dt_range in slicing_list:
+        print(f'optimisation period {dt_range[0]} ---- {dt_range[1]}')
 
-    #     df_opt = df_return[(df_return['Date'] >= start_date) & 
-    #                        (df_return['Date'] <= end_date)]
+        df_opt = df_return[(df_return.index >= dt_range[0]) &
+                           (df_return.index <= dt_range[1])]
+        
+        input_bound = list(optimisation_bounds[dt_range[1]].values())
+        rolling_optimisation_result[dt_range[1]] = portfolio_optimisation(df_opt,
+                                                                          target=target,
+                                                                          input_bound=input_bound,
+                                                                          optimisation_method=optimisation_method)
 
-    #     result_opt = portfolio_optimisation(df_opt, target=target, 
-    #                                         input_bound={}
-    #                                         optimisation_method=optimisation_method)
-
-    #     if (end_date - start_date) >= pd.Timedelta(window_size):
-    #         start_date += pd.Timedelta(step_size)
-    #     
-    #     end_date += pd.Timedelta(step_size)
-    #     rolling_result[end_date] = result_opt
-
-    # return rolling_result
-
-    #                         
+    return rolling_optimisation_result
