@@ -188,12 +188,29 @@ def rolling_portfolio_optimisation(df_return,
                                    default_lower_bound=0,
                                    default_upper_bound=1,
                                    window_size=36,  # months
-                                   optimisation_freq=1, # rebalance every x month
+                                   optimisation_freq=1, # optimise every x month
                                    target='sharpe_ratio', 
                                    optimisation_method='SLSQP',
                                    input_bounds={'2009-03-31': {'cot': [0,0.5], 'fx_trend': [0,0.3]}, 
                                    '2009-04-30': {'fx_value': [0, 0.2], 'equity_quality': [0, 0.25]}}
                                    ):
+    """"
+    Caculate rolling portfolio rolling optimisation result based on user input
+
+    Input: 
+    df_return (pandas df): index must be pd.datetime object
+    default_lower_bound, default_upper_bound (float): between 0,1. 
+        lower and upper bounds for non-specific strategies across all dates
+    window_size (int): number of months used for running optimisation. 
+    optimisation_freq (int): number of months running optimisation frequency 
+    target (str): optimisation target, can be "sharpe_ratio", 
+                                              "diversification_ratio"
+                                              "return"
+    optimisation_methods (str): SLSQP default, check scipy minimize doc
+    input_bounds (dict of dict): user defined optimisation bounds for specific
+                                 strategy and dates
+
+    """
 
     ## put in optimisation results 
     optimisation_dates_list = get_optimisation_dates(df_return=df_return,
