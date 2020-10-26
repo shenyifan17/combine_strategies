@@ -108,9 +108,11 @@ def portfolio_optimisation(df_return,
     volatility = stats_results['volatility']
     sharpe_ratio = stats_results['sharpe_ratio']
     div = stats_results['diversification_ratio']
+    weights_dict = {strategy: weight for strategy, weight in 
+                    zip(df_return.columns, opt_results.x)}
 
     return {'objective': -opt_results.fun,
-            'weights': opt_results.x,
+            'weights': weights_dict,
             'return': ret, # annualised return
             'volatility': volatility, # annualised vol
             'diversification_ratio': div, # annualised diversification ratio
@@ -139,9 +141,27 @@ def get_optimisation_dates(df_return,
     else: 
         start_date = pd.to_datetime(start_date)
         end_date = pd.to_datetime(end_date)
-    optimisation_dates_list = list(pd.bdate_range(start=start_date, 
-                                   end=end_date, 
-                                   freq='BM'))[::optimisation_freq]
+
+    time_step = df_return.index.to_series().diff().min()
+    # Daily data:
+    if time_step == pd.Timedelta('1 day'):
+        optimisation_dates_list = list(pd.bdate_range(start=start_date, 
+                                       end=end_date, 
+                                       freq='BM'))[::optimisation_freq]
+    # Weekly data:
+    elif time_step == pd.Timedelta('7 days'):
+        end_of_month_bday = pd.bdate_range(start=start_date, 
+                                           end=end_date, 
+                                           freq='BM').to_series().dt.dayofweek
+        friday_lists = []
+        for day in end_of_month_bday.index:
+            while (day.dayofweek) < 4:
+                day -= pd.Timedelta('1 day')
+            friday_lists.append(day)
+        optimisation_dates_list = friday_lists[::optimisation_freq]
+    else:
+        raise ValueError('minimum date difference incorrect, must be 1day or 7days')
+
     return optimisation_dates_list
 
 
@@ -215,28 +235,42 @@ def rolling_portfolio_optimisation(df_return,
     ## put in optimisation results 
     optimisation_dates_list = get_optimisation_dates(df_return=df_return,
                                                      optimisation_freq=optimisation_freq)
-    
+
     optimisation_bounds = generate_opt_bounds(df_return=df_return,
                                               optimisation_dates_list=optimisation_dates_list,
                                               default_lower_bound=default_lower_bound,
                                               default_upper_bound=default_upper_bound,
                                               input_bounds=input_bounds)
                 
-    slicing_list = [[str(st_date)[:10], 
-                     str(pd.bdate_range(start=st_date, 
-                                    periods=36, 
-                                    freq='BM')[-1])[:10]] 
-                     for st_date in optimisation_dates_list]\
-                     [:-int((window_size/optimisation_freq))]
+    time_step = df_return.index.to_series().diff().min()
+    # Daily data:
+    if time_step == pd.Timedelta('1 day'):
+        slicing_list = [[str(st_date)[:10], 
+                        str(pd.bdate_range(start=st_date, 
+                                           periods=window_size+1, 
+                                           freq='BM')[-1])[:10]] 
+                        for st_date in optimisation_dates_list]\
+                        [:-int((window_size/optimisation_freq))]
+    # weekly data:
+    elif time_step == pd.Timedelta('7 days'):
+        slicing_list = []
+        for st_date in optimisation_dates_list:
+            end_date = pd.bdate_range(start=st_date, 
+                                      periods=window_size+1,
+                                      freq='BM')[-1]
+            while end_date.dayofweek < 4:
+                end_date -= pd.Timedelta('1 day')
+            slicing_list.append([str(st_date)[:10], str(end_date)[:10]])
+        slicing_list = slicing_list[:-int((window_size/optimisation_freq))]
 
     rolling_optimisation_result = {}
     
     for dt_range in slicing_list:
-        print(f'optimisation period {dt_range[0]} ---- {dt_range[1]}')
+        print(f'{dt_range[0]} ---- {dt_range[1]}')
 
         df_opt = df_return[(df_return.index >= dt_range[0]) &
                            (df_return.index <= dt_range[1])]
-        
+
         input_bound = list(optimisation_bounds[dt_range[1]].values())
         rolling_optimisation_result[dt_range[1]] = portfolio_optimisation(df_opt,
                                                                           target=target,
