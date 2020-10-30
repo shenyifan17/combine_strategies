@@ -39,6 +39,8 @@ def get_stats(weights, df_return):
     vol = np.std(df_return) * np.sqrt(252)
     div = np.sum(vol * weights)/np.sqrt(PortVariance)
 
+    # HHI on explained variance of PCA
+
     return {'return': ret,
             'volatility': np.sqrt(PortVariance),
             'sharpe_ratio': sharpe_ratio,
@@ -278,3 +280,53 @@ def rolling_portfolio_optimisation(df_return,
                                                                           optimisation_method=optimisation_method)
 
     return rolling_optimisation_result
+
+def Duncans_weights(df_return, rolling_optimisation_results):
+
+    strategy_list = df_return.columns
+    opt_dates_list = list(rolling_optimisation_results.keys())
+    input_bounds_max_sharpe = {}
+    for opt_date in opt_dates_list:
+        print(opt_date)
+        lower_bound = (np.array(list(rolling_optimisation_results[opt_date]['weights'].values())) - 0.02).clip(min=0)
+        upper_bound = (np.array(list(rolling_optimisation_results[opt_date]['weights'].values())) + 0.02).clip(max=0.1)
+        bound_list = [[low, up] for low,up in zip(lower_bound, upper_bound)]
+        bounds = {strategy: bound for strategy, bound in zip(strategy_list, bound_list)}
+        
+        input_bounds_max_sharpe[opt_date] = bounds
+    
+    return input_bounds_max_sharpe
+
+def generate_component_weights(df_return, results):
+
+    df_weights_trend = pd.DataFrame(index=df_return.columns)
+    for opt_date in list(results.keys()):
+        df_weights_trend[opt_date] = results[opt_date]['weights'].values()
+    
+
+    start_date, end_date = df_return.index[0], df_return.index[-1]
+    sr_rebalance_dates = pd.Series(pd.bdate_range(start=start_date, 
+                                                    end=end_date,
+                                                    freq='BM'))
+    time_step = df_return.index.to_series().diff().min()
+
+    if time_step == pd.Timedelta('7 days'):
+        # get last fridays 
+        def get_fri(date):
+            while date.dayofweek<4:
+                date -= pd.Timedelta('1 day')
+            return date 
+        sr_rebalance_dates = sr_rebalance_dates.apply(get_fri)
+
+    df_rebalance_dates = pd.DataFrame(index=sr_rebalance_dates)
+    df_rebalance_dates = df_rebalance_dates.rename_axis('Date')
+
+    df_weights = df_weights_trend.T.rename_axis('Date')
+    df_weights.index = pd.to_datetime(df_weights.index)
+    df_component_weights = pd.merge(df_rebalance_dates, df_weights, 
+                                    on='Date', how='outer').ffill().dropna()
+    
+
+    return df_component_weights, df_weights
+
+# def calcualte_

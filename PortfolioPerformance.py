@@ -99,37 +99,50 @@ def Get_Portfolio_Index_Base_Case(input_component_returns,
     return pd.Series([portfolio_index,BoP_weights,EoP_weights,BoP_df,EoP_df,PnL_df_gross,PnL_df_net,transaction_costs_df, df_component_index],
         index=['portfolio_index','BoP_weights','EoP_weights','BoP_df','EoP_df','PnL_df_gross','PnL_df_net','transaction_costs_df', 'df_component_index'])
 
-def get_portfolio_stats(df_portfolio):
+def get_portfolio_stats(df_portfolio, realised_return=True, wts=None):
     """"
     Get annual_return, annual_vol, sharpe_ratio, diversification_ratio
         contribution to risk, percentage contribution to risk
         contribution to return, percentage contribution to return
 
+        If we want to get realised risk stats, weights will be 
+        dummy variable (ones) and df_portfolio input should be 
+        already scaled using above function 
+
     
-    param df_portfolio: (pandas df): fund performance index
+    param df_portfolio: (pandas df): fund performance index (cumulative perf of each strategy)
                                      ALREADY reconstructed to scaled performance
                                      can be absolute value or 
                                      normalised value 
+                                    
+          realised_return (bool): whether use realised return (1+pnl_df_net).cumprod()
+                                          (in this case, wts are 1s)
+                                  or using the real wts 
     """
-    wts = np.ones(len(df_portfolio.columns - 1))
+    if realised_return:
+        wts = np.ones(len(df_portfolio.columns))
+    else: 
+        if wts is None:
+            raise ValueError('must have wts as input')
+
     df_component_return = df_portfolio.pct_change(1).fillna(0)
     portfolio_cov_ann = df_component_return.cov() * 252
     portfolio_sd_ann = np.sqrt(np.dot(wts.T, np.dot(portfolio_cov_ann, wts)))
 
-    portfolio_return = np.sum(df_portfolio.mean() * wts) * 252
+    portfolio_return = np.sum(df_component_return.mean() * wts) * 252
     portfolio_sharpe = portfolio_return / portfolio_sd_ann
-    diversification_ratio = np.sum(portfolio_sd_ann * wts) / portfolio_sd_ann
+    diversification_ratio = np.sum(np.std(df_component_return) * np.sqrt(252) * wts) / portfolio_sd_ann
 
     marginal_risk_contribution = np.dot(wts.T, portfolio_cov_ann) / portfolio_sd_ann
     component_risk_contribution = marginal_risk_contribution * wts
     component_risk_contribution_pct = component_risk_contribution / portfolio_sd_ann
 
-    component_total_return_contribution = (df_portfolio[-1,:] - df_portfolio[0,:]) / np.sum((df_portfolio[0,:]))
-    cum_return = component_total_return_contribution.sum()
-    ann_portfolio_return = (1+cum_return) ** (252/len(df_portfolio)) - 1
+    component_total_return_contribution = (df_portfolio.iloc[-1] - df_portfolio.iloc[0]) / (df_portfolio.iloc[0])
+    # cum_return = component_total_return_contribution.sum()
+    # ann_portfolio_return = (1+cum_return) ** (252/len(df_portfolio)) - 1
 
     return {'volatility': portfolio_sd_ann,
-            'return': ann_portfolio_return, 
+            'return': portfolio_return, 
             'sharpe': portfolio_sharpe,
             'diversification_ratio': diversification_ratio,
             'marginal_risk_contribution': marginal_risk_contribution,
