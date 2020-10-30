@@ -20,15 +20,22 @@ def cal_return(df):
     return df_return
 
 
-def get_stats(weights, df_return):
+def get_stats(weights, df_return, realised_return=False):
     """
     Given portfolio and weights, calculate:
         a. annualised return
         b. annualised volatility
         c. annualised sharpe ratio
         d. annualised diversification ratio
+    This function is used in 
+    - optimisation iteration
+    - calculating rolling risk attribution
+    - calculating realised portfolio risk attribution
+
     :param weights: np.array or list. weights for each strategy
-    :param df_return:
+    :param df_return: percentage return for each strategy 
+                      (if realised_return, then df_return must be scaled
+                      i.e. df_net_return from Chai's function)
     :return: dict containing return, volatility, sharpe_ratio and diversification_ratio
     """
 
@@ -298,6 +305,10 @@ def Duncans_weights(df_return, rolling_optimisation_results):
     return input_bounds_max_sharpe
 
 def generate_component_weights(df_return, results):
+    """"
+    Generate component weights for monthly rebalance (Chai's function)
+
+    """
 
     df_weights_trend = pd.DataFrame(index=df_return.columns)
     for opt_date in list(results.keys()):
