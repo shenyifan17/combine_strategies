@@ -20,7 +20,7 @@ def cal_return(df):
     return df_return
 
 
-def get_stats(weights, df_return, realised_return=False):
+def get_stats(weights, df_return, realised_return=False, frequency='daily'):
     """
     Given portfolio and weights, calculate:
         a. annualised return
@@ -36,22 +36,43 @@ def get_stats(weights, df_return, realised_return=False):
     :param df_return: percentage return for each strategy 
                       (if realised_return, then df_return must be scaled
                       i.e. df_net_return from Chai's function)
+    :param frequency (str): frequency of data, default daily (252), weekly (52)
     :return: dict containing return, volatility, sharpe_ratio and diversification_ratio
     """
+    if realised_return:
+        weights = np.ones(len(df_return.columns))
 
+    multiplier_dict = {'daily': 252, 'weekly': 52}
+    multiplier = multiplier_dict[frequency] 
+    
     weights = np.array(weights)
-    ret = np.sum(df_return.mean() * weights) * 252 
-    PortVariance = np.dot(weights.T, np.dot(df_return.cov(), weights)) * 252 
-    sharpe_ratio = ret/np.sqrt(PortVariance)
-    vol = np.std(df_return) * np.sqrt(252)
-    div = np.sum(vol * weights)/np.sqrt(PortVariance)
+    ret = np.sum(df_return.mean() * weights) * multiplier
+    portfolio_cov_ann = df_return.cov() * multiplier
+    portfolio_var_ann = np.dot(weights.T, 
+                               np.dot(portfolio_cov_ann, weights)) 
+    portfolio_std_ann = np.sqrt(portfolio_var_ann)
+
+    sharpe_ratio = ret / portfolio_std_ann 
+    vol = np.std(df_return) * np.sqrt(multiplier)
+    div = np.sum(vol * weights) / portfolio_std_ann
+
+    marginal_risk_contribution = np.dot(weights.T, portfolio_cov_ann) / portfolio_std_ann
+    component_risk_contribution = marginal_risk_contribution * weights 
+    component_risk_contribution_pct = component_risk_contribution / portfolio_std_ann
+
+    df_portfolio = (1+df_return).cumprod()
+    component_total_return_contribution = (df_portfolio.iloc[-1] - df_portfolio.iloc[0]) / (df_portfolio.iloc[0])
 
     # HHI on explained variance of PCA
 
     return {'return': ret,
-            'volatility': np.sqrt(PortVariance),
+            'volatility': portfolio_std_ann,
             'sharpe_ratio': sharpe_ratio,
-            'diversification_ratio': div}
+            'diversification_ratio': div,
+            'marginal_risk_contribution': marginal_risk_contribution,
+            'component_risk_contribution': component_risk_contribution,
+            'component_risk_contribution_pct': component_risk_contribution_pct,
+            'component_total_return_contribution': component_total_return_contribution}
 
 def negative_target(weights, df_return, target):
     """
@@ -125,7 +146,11 @@ def portfolio_optimisation(df_return,
             'return': ret, # annualised return
             'volatility': volatility, # annualised vol
             'diversification_ratio': div, # annualised diversification ratio
-            'sharpe_ratio': sharpe_ratio} # annualised sharpe_ratio
+            'sharpe_ratio': sharpe_ratio, # annualised sharpe ratio
+            'marginal_risk_contribution': stats_results['marginal_risk_contribution'],
+            'component_risk_contribution': stats_results['component_risk_contribution'],
+            'component_risk_contribution_pct': stats_results['component_risk_contribution_pct'],
+            'component_total_return_contribution': stats_results['component_total_return_contribution']} # 
 
 
 def get_optimisation_dates(df_return,
@@ -339,5 +364,3 @@ def generate_component_weights(df_return, results):
     
 
     return df_component_weights, df_weights
-
-# def calcualte_
