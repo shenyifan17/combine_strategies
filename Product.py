@@ -8,6 +8,9 @@ This class contains two portfoliio optimisation of Alternatives Investments
 class AlternativeRiskPremium(object):
 
     def __init__(self):
+        """"
+        Add which month end 
+        """
 
         pass 
 

@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 from scipy.optimize import minimize
 import matplotlib.pyplot as plt
+from optimisation_constraints import * 
 
 def cal_return(df):
     """
@@ -85,14 +86,6 @@ def negative_target(weights, df_return, target):
                                                       'diversification_ratio'
     """
     return get_stats(weights, df_return)[target] * (-1)
-
-def check_sum(weights):
-    """
-    Checks whether weights add up to 1, used in scipy.minimize
-    :param weights:
-    :return:
-    """
-    return np.sum(weights) - 1
 
 
 def portfolio_optimisation(df_return,
