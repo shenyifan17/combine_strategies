@@ -93,7 +93,8 @@ def portfolio_optimisation(df_return,
                            lower_bound=0,
                            input_bound=None,
                            target='sharpe_ratio',
-                           optimisation_method='SLSQP'):
+                           optimisation_method='SLSQP',
+                           product='GRM'):
     """
     Run portfolio optimisation using user input
     :param df_return: (pandas df): contains daily returns
@@ -111,8 +112,16 @@ def portfolio_optimisation(df_return,
     # initialise weights
     init_guess = np.array(np.random.randn(num_strategies))
     init_guess /= np.sum(init_guess)
-    
-    cons = ({'type': 'eq', 'fun': check_sum})
+
+
+    if product == 'ÁRP':
+        cons = ({'type': 'eq', 'fun': check_sum})
+    elif product == 'GRM':
+        cons = ({'type': 'eq', 'fun': check_sum}, 
+                {'type': 'ineq', 'fun': cons_first_risk},
+                {'type': 'ineq', 'fun': cons_defensive_factors},
+                {'type': 'ineq', 'fun': cons_trend},
+                {'type': 'ineq', 'fun': cons_tail_risk})
 
     if input_bound is not None:
         bounds = input_bound
