@@ -8,11 +8,13 @@ def check_sum(weights):
     """
     return np.sum(weights) - 1
 
-def cons_first_risk(cons_dict, weights_dict):
 
-    return sum(cons_dict['first_risk'].values) - sum(weights_dict['first_rick'].values)
+def grm_constraints(cons_dict, weights_dict, strategy_group):
 
-def cons_defensive_factors(cons_dict, weights_dict):
+    return cons_dict[strategy_group] - sum(weights_dict[strategy_group].values)
 
-    return sum(cons_dict['defensive_factors'].values) - sum(weights_dict['defensive_factors'].values)
-
+def check_sum_grm(weights_dict):
+    ssum = 0 
+    for key in weights_dict.keys():
+        ssum += weights_dict[key]
+    return ssum - 1 
