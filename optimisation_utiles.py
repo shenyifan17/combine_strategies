@@ -95,8 +95,8 @@ def portfolio_optimisation(df_return,
                            target='sharpe_ratio',
                            optimisation_method='SLSQP',
                            product='GRM',
-                           grm_bound={'first_risk': 0.5, 'defensive_factors': 0.5, 
-                                              'trend': 0.5, 'tail_risk': 0.5}):
+                           grm_bound={'first_risk': [0.1, 0.5], 'defensive_factors': [0.1, 0.5], 
+                                              'trend': [0.1, 0.5], 'tail_risk': [0.1, 0.5]}):
     """
     Run portfolio optimisation using user input
     :param df_return: (pandas df): contains daily returns
@@ -111,42 +111,49 @@ def portfolio_optimisation(df_return,
 
     num_strategies = len(df_return.columns)
 
+    init_weights = np.array(np.random.rand(num_strategies))
+    init_weights /= np.sum(init_weights)
+
     # initialise weights
     if product == 'ARP': # note weights here is a np array
-        init_weights = np.array(np.random.rand(num_strategies))
-        init_weights /= np.sum(init_weights)
+
         cons = ({'type': 'eq', 'fun': lambda weights: np.sum(weights) - 1})
     
     elif product == 'GRM': # note weights here is a dict of np arrays
 
-        if sum(list(grm_bound.values())) <= 1:
-            raise ValueError('grm_bound sum should be larger than 1')
-        
-        init_weights = {'first_risk': np.array(np.random.rand(12)), 
-                      'defensive_factors': np.array(np.random.rand(9)),
-                      'trend': np.array(np.random.rand(6)),
-                      'tail_risk': np.array(np.random.rand(4))}
-
-        normaliser = sum([np.sum(val) for val in list(init_weights.values())])
-
-        for key in init_weights.keys():
-            init_guess[key] /= normaliser
+        if sum([bound[1] for bound in list(grm_bound.values())]) <= 1:
+            raise ValueError('grm_bound upper bound sum should be larger than 1')
+        elif sum([bound[0] for bound in list(grm_bound.values())]) >= 0.9:
+            raise ValueError('grm_bound lower bound sum should be smaller than 0.9')
 
         cons = (
                 {'type': 'eq', 
-                'fun': lambda weights: sum([np.sum(val) for val in list(weights.values())]) - 1}, # portfolio sum to 1
+                'fun': lambda weights: np.sum(weights) - 1}, # portfolio sum to 1
 
                 {'type': 'ineq', 
-                'fun': lambda weights: grm_bound['first_risk'] - weights['first_risk'].sum()}, # not exceeding group constraints
+                'fun': lambda weights: grm_bound['first_risk'][1] - weights[0:11].sum()}, # not exceeding group constraints
 
                 {'type': 'ineq',
-                'fun': lambda weights: grm_bound['defensive_factors'] - weights['defensive_factors'].sum()},
+                'fun': lambda weights: grm_bound['defensive_factors'][1] - weights[11:20].sum()},
 
                 {'type': 'ineq',
-                'fun': lambda weights: grm_bound['trend'] - weights_dict['trend'].sum()},
+                'fun': lambda weights: grm_bound['trend'][1] - weights[20:26].sum()},
 
                 {'type': 'ineq',
-                'fun': lambda weights: grm_bound['tail_risk'] - weights['tail_risk'].sum()}
+                'fun': lambda weights: grm_bound['tail_risk'][1] - weights[26:30].sum()}, 
+
+                {'type': 'ineq',
+                'fun': lambda weights: weights[0:11].sum() - grm_bound['first_risk'][0]}, # not below group constraints
+                 
+                {'type': 'ineq',
+                'fun': lambda weights: weights[11:20].sum() - grm_bound['defensive_factors'][0]},
+
+                {'type': 'ineq',
+                'fun': lambda weights: weights[20:26].sum() - grm_bound['trend'][0]},
+                
+                {'type': 'ineq',
+                'fun': lambda weights: weights[26:30].sum() - grm_bound['tail_risk'][0]}
+
                 ) # to do: change to for loop
 
 
@@ -156,7 +163,7 @@ def portfolio_optimisation(df_return,
         bounds = [[lower_bound, upper_bound] for i in range(num_strategies)]
 
     opt_results = minimize(fun=negative_target,
-                           x0=init_guess, 
+                           x0=init_weights, 
                            args=(df_return, target),
                            method=optimisation_method,
                            bounds=bounds, 
@@ -276,9 +283,9 @@ def rolling_portfolio_optimisation(df_return,
                                    target='sharpe_ratio', 
                                    optimisation_method='SLSQP',
                                    input_bounds={'2009-03-31': {'cot': [0,0.5], 'fx_trend': [0,0.3]}, 
-                                   '2009-04-30': {'fx_value': [0, 0.2], 'equity_quality': [0, 0.25]}}
+                                   '2009-04-30': {'fx_value': [0, 0.2], 'equity_quality': [0, 0.25]}}, 
                                    grm_bound={'first_risk': 0.25, 'defensive_factors': 0.25, 
-                                              'trend': 0.3, 'tail_risk': 0.2}'
+                                              'trend': 0.3, 'tail_risk': 0.2},
                                    product='GRM'):
     """"
     Caculate rolling portfolio rolling optimisation result based on user input
