@@ -1,8 +1,7 @@
 import pandas as pd 
 import numpy as np
 from scipy.optimize import minimize
-import matplotlib.pyplot as plt
-from optimisation_constraints import * 
+from grm_utiles import * 
 
 def cal_return(df):
     """
@@ -64,12 +63,16 @@ def get_stats(weights, df_return, realised_return=False, frequency='daily'):
     df_portfolio = (1+df_return).cumprod()
     component_total_return_contribution = (df_portfolio.iloc[-1] - df_portfolio.iloc[0]) / (df_portfolio.iloc[0])
 
+    df_portfolio_index = (1 + (df_return * weights).sum(axis=1)).cumprod()
+    max_dd = max_drawdown(df_portfolio_index)
+
     # HHI on explained variance of PCA
 
     return {'return': ret,
             'volatility': portfolio_std_ann,
             'sharpe_ratio': sharpe_ratio,
             'diversification_ratio': div,
+            'max_dd': -max_dd, 
             'marginal_risk_contribution': marginal_risk_contribution,
             'component_risk_contribution': component_risk_contribution,
             'component_risk_contribution_pct': component_risk_contribution_pct,
@@ -83,7 +86,8 @@ def negative_target(weights, df_return, target):
     :param target: (str): optimisation target, can be 'return',
                                                       'volatility',
                                                       'sharpe_ratio',
-                                                      'diversification_ratio'
+                                                      'diversification_ratio',
+                                                      'max_dd'
     """
     return get_stats(weights, df_return)[target] * (-1)
 

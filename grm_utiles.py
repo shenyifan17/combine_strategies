@@ -3,10 +3,10 @@ import numpy as np
 
 def max_drawdown(arr):
 
-    i = np.argmax(np.maximum.acumulate(arr) - arr)
+    i = np.argmax(np.maximum.accumulate(arr) - arr)
     j = np.argmax(arr[:i])
 
-    max_dd = (arr[i] - arr[j]) / arr[i]
+    max_dd = (arr[j] - arr[i]) / arr[i]
     return max_dd
 
 
