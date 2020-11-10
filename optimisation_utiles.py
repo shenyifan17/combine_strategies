@@ -1,6 +1,7 @@
 import pandas as pd 
 import numpy as np
 from scipy.optimize import minimize
+from PortfolioPerformance import * 
 from grm_utiles import * 
 
 def cal_return(df):
@@ -20,27 +21,52 @@ def cal_return(df):
     return df_return
 
 
-def get_stats(weights, df_return, realised_return=False, frequency='daily'):
+def get_stats(weights, 
+              df_return, 
+              realised_return=False, 
+              frequency='daily',
+              mode_of_maxdrawdown='rebalance'):
     """
     Given portfolio and weights, calculate:
         a. annualised return
         b. annualised volatility
         c. annualised sharpe ratio
         d. annualised diversification ratio
+        e. max drawdown
+        f. risk attributions
     This function is used in 
     - optimisation iteration
+        -- Note in when conducting miminising max drawdown, 
+           when setting mode_of_maxdraw to 'rebalance', 
+           the function calls "Get_Portfolio_Index_Base"
+           which rebalance the strategy over the weights given 
+           (doing a for loop over all business day)
+           This gives accurate (real world) max_drawdown values 
+           But THIS IS SUPER SLOW 
+        -- We can set mode_of_maxdrawdown to 'buy_n_hold',
+           this assumes we do no rebalance over the given period,
+           which is a vectorised operation. less accurate but 
+           a lot more accurate than 'rebalance' mode
     - calculating rolling risk attribution
     - calculating realised portfolio risk attribution
+
+    Note: when using this function to calculate realised return 
+               i.e. realised_return = True
+               Then mode_of_maxdrawdown must be 'buy_n_hold'
+    Note: when we want to max sharpe, diversification, return without 
+          caring about rebalance, we simply set mode_of_maxdrawdown to 'buy_n_hold' 
 
     :param weights: np.array or list. weights for each strategy
     :param df_return: percentage return for each strategy 
                       (if realised_return, then df_return must be scaled
                       i.e. df_net_return from Chai's function)
     :param frequency (str): frequency of data, default daily (252), weekly (52)
+    :param mode_of_maxdrawdown (str): either 'rebalance' or 'buy_n_hold'. See above
     :return: dict containing return, volatility, sharpe_ratio and diversification_ratio
     """
     if realised_return:
         weights = np.ones(len(df_return.columns))
+        mode_of_maxdrawdown = 'buy_n_hold'
 
     multiplier_dict = {'daily': 252, 'weekly': 52}
     multiplier = multiplier_dict[frequency] 
@@ -63,8 +89,23 @@ def get_stats(weights, df_return, realised_return=False, frequency='daily'):
     df_portfolio = (1+df_return).cumprod()
     component_total_return_contribution = (df_portfolio.iloc[-1] - df_portfolio.iloc[0]) / (df_portfolio.iloc[0])
 
-    df_portfolio_index = (1 + (df_return * weights).sum(axis=1)).cumprod()
-    max_dd = max_drawdown(df_portfolio_index)
+    if mode_of_maxdrawdown == 'buy_n_hold':
+        df_portfolio_index = ((1 + df_return) * weights).sum(axis=1).cumprod()
+        max_dd = max_drawdown(df_portfolio_index)
+
+    elif mode_of_maxdrawdown == 'rebalance':
+        start_date, end_date = df_return.index[0], df_return.index[-1]
+        rebalance_dates_index = pd.bdate_range(start=start_date, end=end_date, freq='BM')
+        df_component_weights = pd.DataFrame(index=rebalance_dates_index, 
+                                            data=[weights,]* len(rebalance_dates_index),
+                                            columns=df_return.columns)\
+                                            .rename_axis('Date')
+        df_portfolio_index = Get_Portfolio_Index_Base_Case(df_return, 
+                                                           df_component_weights,
+                                                           initial_notional=1)['portfolio_index']
+        max_dd = max_drawdown(df_portfolio_index.values)
+    else: 
+        raise ValueError('mode_of_maxdrawdown must be "buy_n_hold" or "rebalance"')
 
     # HHI on explained variance of PCA
 
@@ -377,6 +418,7 @@ def Duncans_weights(df_return, rolling_optimisation_results):
 def generate_component_weights(df_return, results):
     """"
     Generate component weights for monthly rebalance (Chai's function)
+    For Get_Portfolio_Index_Base_Case use after using rolling_rebalance
 
     """
 
