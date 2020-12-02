@@ -24,8 +24,8 @@ def cal_return(df):
 def get_stats(weights, 
               df_return, 
               realised_return=False, 
-              frequency='daily',
-              mode_of_maxdrawdown='rebalance'):
+              frequency='weekly',
+              mode_of_maxdrawdown='buy_n_hold'):
     """
     Given portfolio and weights, calculate:
         a. annualised return
@@ -90,8 +90,9 @@ def get_stats(weights,
     component_total_return_contribution = (df_portfolio.iloc[-1] - df_portfolio.iloc[0]) / (df_portfolio.iloc[0])
 
     if mode_of_maxdrawdown == 'buy_n_hold':
-        df_portfolio_index = ((1 + df_return) * weights).sum(axis=1).cumprod()
-        max_dd = max_drawdown(df_portfolio_index)
+        pass 
+        # df_portfolio_index = ((1 + df_return) * weights).sum(axis=1).cumprod()
+        # max_dd = max_drawdown(df_portfolio_index)
 
     elif mode_of_maxdrawdown == 'rebalance':
         start_date, end_date = df_return.index[0], df_return.index[-1]
@@ -113,7 +114,7 @@ def get_stats(weights,
             'volatility': portfolio_std_ann,
             'sharpe_ratio': sharpe_ratio,
             'diversification_ratio': div,
-            'max_dd': -max_dd, 
+            # 'max_dd': -max_dd, 
             'marginal_risk_contribution': marginal_risk_contribution,
             'component_risk_contribution': component_risk_contribution,
             'component_risk_contribution_pct': component_risk_contribution_pct,
@@ -153,7 +154,6 @@ def portfolio_optimisation(df_return,
                                       details see scipy.optimize.minimize documentation
     :return: dict containing all optimisation information
     """
-
     num_strategies = len(df_return.columns)
 
     init_weights = np.array(np.random.rand(num_strategies))
@@ -161,7 +161,6 @@ def portfolio_optimisation(df_return,
 
     # initialise weights
     if product == 'ARP': # note weights here is a np array
-
         cons = ({'type': 'eq', 'fun': lambda weights: np.sum(weights) - 1})
     
     elif product == 'GRM': # note weights here is a dict of np arrays
@@ -206,7 +205,6 @@ def portfolio_optimisation(df_return,
         bounds = input_bound
     else:
         bounds = [[lower_bound, upper_bound] for i in range(num_strategies)]
-
     opt_results = minimize(fun=negative_target,
                            x0=init_weights, 
                            args=(df_return, target),
@@ -451,3 +449,41 @@ def generate_component_weights(df_return, results):
     
 
     return df_component_weights, df_weights
+
+
+def save_results(rolling_result, rebalance_results, which='div'):
+    # weights 
+    df_weights = pd.DataFrame()
+    df_risk_contrib = pd.DataFrame()
+    df_risk_contrib_pct = pd.DataFrame()
+    df_return_contrib = pd.DataFrame()
+
+    df_cum_return = rebalance_results['portfolio_index']
+    df_cum_return = df_cum_return[df_cum_return.index>='2012-09-20']
+
+    df_component_return = rebalance_results['PnL_df_net']
+    df_component_return = df_component_return[df_component_return.index>='2012-09-29']
+    full_stats = get_stats(weights='-', df_return=df_component_return, realised_return=True, frequency='daily')
+
+    df_full_stats = pd.concat([pd.DataFrame(full_stats['component_risk_contribution'], index=df_weekly.columns, columns=['component_risk_contri']).T,
+                    pd.DataFrame(full_stats['component_risk_contribution_pct'], index=df_weekly.columns, columns=['component_risk_contri_pct']).T,
+                    pd.DataFrame(full_stats['component_total_return_contribution'], index=df_weekly.columns, columns=['component_total_return_contri']).T])
+
+
+    for date in rolling_result:
+        df_weights = pd.concat([df_weights, pd.DataFrame(rolling_result[date]['weights'], index=[date])])
+        df_risk_contrib = pd.concat([df_risk_contrib, pd.DataFrame(div_results[date]['component_risk_contribution'], index=df_weekly.columns, columns=[date]).T])
+        df_risk_contrib_pct = pd.concat([df_risk_contrib_pct, pd.DataFrame(div_results[date]['component_risk_contribution_pct'], index=df_weekly.columns, columns=[date]).T])
+        df_return_contrib = pd.concat([df_return_contrib, pd.DataFrame(div_results[date]['component_total_return_contribution'], columns=[date]).T])
+
+    writer = pd.ExcelWriter(f'{which}.xlsx', engine='xlsxwriter')
+    df_cum_return.to_excel(writer, sheet_name='performance')
+    df_full_stats.to_excel(writer, sheet_name='overall_risk_stats')
+    df_weights.to_excel(writer, sheet_name='weights')
+    df_risk_contrib.to_excel(writer, sheet_name='risk_contribution')
+    df_risk_contrib_pct.to_excel(writer, sheet_name='risk_contribution_pct')
+    df_return_contrib.to_excel(writer, sheet_name='return_contribution')
+    writer.save()
+
+    return full_stats
+    
