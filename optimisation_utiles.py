@@ -451,7 +451,7 @@ def generate_component_weights(df_return, results):
     return df_component_weights, df_weights
 
 
-def save_results(rolling_result, rebalance_results, which='div'):
+def save_results(rolling_result, rebalance_results, which, df_weekly):
     # weights 
     df_weights = pd.DataFrame()
     df_risk_contrib = pd.DataFrame()
@@ -472,9 +472,9 @@ def save_results(rolling_result, rebalance_results, which='div'):
 
     for date in rolling_result:
         df_weights = pd.concat([df_weights, pd.DataFrame(rolling_result[date]['weights'], index=[date])])
-        df_risk_contrib = pd.concat([df_risk_contrib, pd.DataFrame(div_results[date]['component_risk_contribution'], index=df_weekly.columns, columns=[date]).T])
-        df_risk_contrib_pct = pd.concat([df_risk_contrib_pct, pd.DataFrame(div_results[date]['component_risk_contribution_pct'], index=df_weekly.columns, columns=[date]).T])
-        df_return_contrib = pd.concat([df_return_contrib, pd.DataFrame(div_results[date]['component_total_return_contribution'], columns=[date]).T])
+        df_risk_contrib = pd.concat([df_risk_contrib, pd.DataFrame(rolling_result[date]['component_risk_contribution'], index=df_weekly.columns, columns=[date]).T])
+        df_risk_contrib_pct = pd.concat([df_risk_contrib_pct, pd.DataFrame(rolling_result[date]['component_risk_contribution_pct'], index=df_weekly.columns, columns=[date]).T])
+        df_return_contrib = pd.concat([df_return_contrib, pd.DataFrame(rolling_result[date]['component_total_return_contribution'], columns=[date]).T])
 
     writer = pd.ExcelWriter(f'{which}.xlsx', engine='xlsxwriter')
     df_cum_return.to_excel(writer, sheet_name='performance')
